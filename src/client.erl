@@ -12,14 +12,19 @@
 %% API
 -export([getMsgIdFromServer/0,getMessage/0]).
 
+%% Imports
+-import(werkzeug, [get_config_value/2]).
+
 %%%-------------------------------------------------------------------
 %%% API - get message id
 %%%-------------------------------------------------------------------
 getMsgIdFromServer() ->
   Servername = getServerName(),
-  Servername ! { query_msgid, self()},
+  io:format("Sending request to server ~p\n", [Servername]),
+  Server = global:whereis_name(Servername),
+  Server ! { query_msgid, self()},
   receive { msgid, Number} ->
-    io:format("Received: ~s", [Number])
+    io:format("Received: ~p\n", [Number])
   end.
 
 %%%-------------------------------------------------------------------
@@ -30,7 +35,7 @@ getMessage() ->
   Servername ! { query_messages, self()},
   receive
     { message, Number,Nachricht,Terminated} ->
-      io:format("Received: ~s ( ID: ~B )", [Nachricht, Number]),
+      io:format("Received: ~s ( ID: ~p )", [Nachricht, Number]),
       if
         not Terminated ->
           getMessage()
@@ -48,3 +53,12 @@ getServerName() ->
   {ok, ConfigListe} = file:consult("server.cfg"),
   {ok, Servername} = get_config_value(servername, ConfigListe),
   Servername.
+
+%%%-------------------------------------------------------------------
+%%% Logging
+%%%-------------------------------------------------------------------
+log(Msg) ->
+  Logfilename = io_lib:format("Client@~p.log", [self()]),
+  werkzeug:logging(Logfilename, Msg).
+log(Msg, Params) ->
+  log(io_lib:format(Msg, Params)).
