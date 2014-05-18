@@ -21,7 +21,7 @@
 start() ->
   H = [],
   D = [],
-  ServerPid = spawn(fun() -> loop(H,D) end),
+  ServerPid = spawn(fun() -> loop(H,D,0) end),
   log("Server started with PID ~p\n", [ServerPid]),
   {ok, ConfigListe} = file:consult("server.cfg"),
 	{ok, Servername} = get_config_value(servername, ConfigListe),
@@ -30,7 +30,7 @@ start() ->
 %%%-------------------------------------------------------------------
 %%% Server loop
 %%%-------------------------------------------------------------------
-loop(H,D) ->
+loop(H,D,Uid) ->
   receive
     {query_messages, Client} ->
       log("query_messages"),
@@ -40,17 +40,23 @@ loop(H,D) ->
       logging("NServer.log", "new_message"),
       {ok, ConfigListe} = file:consult("server.cfg"),
       {ok, DeliverQueueLimit} = get_config_value(dlqlimit, ConfigListe),
-      Dlength = lengthSL(D),
+      % check if Number is unique
       if
-        Dlength > DeliverQueueLimit -> werkzeug:pushSL(H, {Number, Nachricht});
-        true -> werkzeug:pushSL(D, {Number, Nachricht})
+        werkzeug:findSL(D, Number) = {-1,nok} and werkzeug:findSL(H, Number) = {-1, nok} ->
+          Dlength = lengthSL(D),
+          % check where to add the message to Holdqueue or Deliveryqueue
+          if
+            Dlength > DeliverQueueLimit -> werkzeug:pushSL(H, {Number, Nachricht});
+            true -> werkzeug:pushSL(D, {Number, Nachricht})
+          end
       end;
 
     {query_msgid, Client} ->
       logging("NServer.log", "query_msgid"),
-      Client ! { msgid, lengthSL(D)+lengthSL(H)+1}
+      Client ! { msgid, Uid},
+      Uid = Uid + 1
   end,
-  loop(H,D).
+  loop(H,D,Uid).
 
 %%%-------------------------------------------------------------------
 %%% Logging
