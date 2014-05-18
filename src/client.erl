@@ -10,25 +10,70 @@
 -author("moritzspindelhirn").
 
 %% API
--export([getMsgIdFromServer/0,getMessage/0]).
+-export([startEditorial/1]).
 
 %% Imports
 -import(werkzeug, [get_config_value/2]).
+-import(timer, [apply_after/4]).
+
+%% Defines
+-define(TEAMNR, 99).
+-define(PRAKNR, 3).
 
 %%%-------------------------------------------------------------------
-%%% API - get message id
+%%% Start editor client ( sending text messages )
 %%%-------------------------------------------------------------------
-getMsgIdFromServer() ->
+startEditorial(Name) ->
+  Sendintervall = getSendinterval(),
+  SendintervallMs = Sendintervall * 1000,
+  sendloop(Name, SendintervallMs, 0, 0).
+
+%%%-------------------------------------------------------------------
+%%% Loop for sending messages
+%%%-------------------------------------------------------------------
+sendloop(Name, Timeout, BatchNum, Count) ->
+  apply_after(Timeout, client, prepAndSendMsg, [Name, Count]),
+  BatchNum = BatchNum + 1,
+  Count = Count + 1,
+  if
+    BatchNum > 5 ->
+      Half = round(Timeout / 2),
+      Diff = random:uniform(Half),
+      if
+        Diff < 1000 -> Diff = 1000
+      end,
+      UpOrDown = random:uniform(),
+      if
+        UpOrDown >= 0.5 -> Timeout = Timeout + Diff;
+        true -> Timeout = Timeout - Diff
+      end,
+      BatchNum = 0
+  end,
+  sendloop(Name, Timeout, BatchNum, Count).
+
+prepAndSendMsg(Name, Nr) ->
+  {ok, Hostname} = inet:gethostname(),
+  SendParams = [Name, Hostname, self(), ?PRAKNR, ?TEAMNR, Nr, date()],
+  % Misterious: C 769 (22)
+  % 0-client@lab18-<0.1313.0>-C-1-03: 22te_Nachricht. Sendezeit: 16.05 18:01:30,769|(22)
+  FormatStr = "~s@~s-~p-C-~d-~d: ~dte_Nachricht. Sendezeit: ~p",
+  Msg = io_lib:format(FormatStr, SendParams),
+  sendMessageWithId(Msg).
+
+%%%-------------------------------------------------------------------
+%%% Send a message
+%%% First get a new message ID from server
+%%%-------------------------------------------------------------------
+sendMessageWithId(Msg) ->
   Servername = getServerName(),
-  io:format("Sending request to server ~p\n", [Servername]),
   Server = global:whereis_name(Servername),
   Server ! { query_msgid, self()},
   receive { msgid, Number} ->
-    io:format("Received: ~p\n", [Number])
+    Server ! {new_message, {Msg, Number}}
   end.
 
 %%%-------------------------------------------------------------------
-%%% API - get messages
+%%% Get messages
 %%%-------------------------------------------------------------------
 getMessage() ->
   Servername = getServerName(),
@@ -43,16 +88,20 @@ getMessage() ->
   end.
 
 %%%-------------------------------------------------------------------
-%%% API - send new message
-%%%-------------------------------------------------------------------
-
-%%%-------------------------------------------------------------------
 %%% Get Server name from config
 %%%-------------------------------------------------------------------
 getServerName() ->
   {ok, ConfigListe} = file:consult("server.cfg"),
   {ok, Servername} = get_config_value(servername, ConfigListe),
   Servername.
+
+%%%-------------------------------------------------------------------
+%%% Get sendinterval from config
+%%%-------------------------------------------------------------------
+getSendinterval() ->
+  {ok, ConfigListe} = file:consult("server.cfg"),
+  {ok, Sendintervall} = get_config_value(sendeintervall, ConfigListe),
+  Sendintervall.
 
 %%%-------------------------------------------------------------------
 %%% Logging
