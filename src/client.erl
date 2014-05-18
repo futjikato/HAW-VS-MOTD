@@ -1,7 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author moritzspindelhirn
-%%% @copyright (C) 2014, <COMPANY>
-%%% @doc
+%%% @doc MOTD Client
 %%%
 %%% @end
 %%% Created : 17. Mai 2014 13:19
@@ -10,7 +9,7 @@
 -author("moritzspindelhirn").
 
 %% API
--export([startEditorial/1]).
+-export([start/1]).
 
 %% Imports
 -import(werkzeug, [get_config_value/2]).
@@ -23,7 +22,7 @@
 %%%-------------------------------------------------------------------
 %%% Start editor client ( sending text messages )
 %%%-------------------------------------------------------------------
-startEditorial(Name) ->
+start(Name) ->
   Sendintervall = getSendinterval(),
   SendintervallMs = Sendintervall * 1000,
   sendloop(Name, SendintervallMs, 0, 0).
@@ -56,7 +55,11 @@ sendloop(Name, Timeout, BatchNum, Count) ->
         Timeout < 2000 -> Timeout = 2000
       end,
       % reset batch counter
-      BatchNum = 0
+      BatchNum = 0,
+      % get unique message without send message ( Requirement 11. )
+      getMessageId(fun() -> noop end),
+      % now read all messages
+      getMessages()
   end,
   sendloop(Name, Timeout, BatchNum, Count).
 
@@ -79,23 +82,37 @@ prepAndSendMsg(Name, Nr) ->
 sendMessageWithId(Msg) ->
   Servername = getServerName(),
   Server = global:whereis_name(Servername),
+  getMessageId(fun(Number) -> Server ! {new_message, {Msg, Number}} end).
+
+%%%-------------------------------------------------------------------
+%%% Request a new message ID from teh server
+%%%-------------------------------------------------------------------
+getMessageId(Callback) ->
+  % make sure callback is a alid function
+  if
+    not is_function(Callback) -> Callback = fun() -> noop end
+  end,
+  Servername = getServerName(),
+  Server = global:whereis_name(Servername),
+  % request new message id
   Server ! { query_msgid, self()},
+  % receive new message and callback with it
   receive { msgid, Number} ->
-    Server ! {new_message, {Msg, Number}}
+    Callback(Number)
   end.
 
 %%%-------------------------------------------------------------------
 %%% Get messages
 %%%-------------------------------------------------------------------
-getMessage() ->
+getMessages() ->
   Servername = getServerName(),
   Servername ! { query_messages, self()},
   receive
     { message, Number,Nachricht,Terminated} ->
-      io:format("Received: ~s ( ID: ~p )", [Nachricht, Number]),
+      log("Received: ~s ( ID: ~p )", [Nachricht, Number]),
       if
         not Terminated ->
-          getMessage()
+          getMessages()
       end
   end.
 
