@@ -32,25 +32,37 @@ startEditorial(Name) ->
 %%% Loop for sending messages
 %%%-------------------------------------------------------------------
 sendloop(Name, Timeout, BatchNum, Count) ->
+  % send after time
   apply_after(Timeout, client, prepAndSendMsg, [Name, Count]),
   BatchNum = BatchNum + 1,
   Count = Count + 1,
+  % change timeout time after 5 messages
   if
     BatchNum > 5 ->
       Half = round(Timeout / 2),
       Diff = random:uniform(Half),
+      % change must be at least 1 sek
       if
         Diff < 1000 -> Diff = 1000
       end,
+      % random add or sub
       UpOrDown = random:uniform(),
       if
         UpOrDown >= 0.5 -> Timeout = Timeout + Diff;
         true -> Timeout = Timeout - Diff
       end,
+      % check new timeout is at least 2000
+      if
+        Timeout < 2000 -> Timeout = 2000
+      end,
+      % reset batch counter
       BatchNum = 0
   end,
   sendloop(Name, Timeout, BatchNum, Count).
 
+%%%-------------------------------------------------------------------
+%%% Build the real message string and calls sendMessageWithId
+%%%-------------------------------------------------------------------
 prepAndSendMsg(Name, Nr) ->
   {ok, Hostname} = inet:gethostname(),
   SendParams = [Name, Hostname, self(), ?PRAKNR, ?TEAMNR, Nr, date()],
