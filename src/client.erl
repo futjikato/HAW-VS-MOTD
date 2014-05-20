@@ -45,10 +45,6 @@ startSingle(Name) ->
 %%% Loop for sending messages
 %%%-------------------------------------------------------------------
 sendloop(Name, Timeout, BatchNum, Count, SendMessageSL) ->
-  % send after time
-  apply_after(Timeout, client, prepAndSendMsg, [Name, Count, SendMessageSL]),
-  BatchNum = BatchNum + 1,
-  Count = Count + 1,
   % change timeout time after 5 messages
   if
     BatchNum > 5 ->
@@ -56,45 +52,51 @@ sendloop(Name, Timeout, BatchNum, Count, SendMessageSL) ->
       Diff = random:uniform(Half),
       % change must be at least 1 sek
       if
-        Diff < 1000 -> Diff = 1000
+        Diff < 1000 -> NewDiff = 1000;
+        true -> NewDiff = Diff
       end,
       % random add or sub
       UpOrDown = random:uniform(),
       if
-        UpOrDown >= 0.5 -> Timeout = Timeout + Diff;
-        true -> Timeout = Timeout - Diff
+        UpOrDown >= 0.5 -> NewTimeout = Timeout + Diff;
+        true -> NewTimeout = Timeout - Diff
       end,
       % check new timeout is at least 2000
       if
-        Timeout < 2000 -> Timeout = 2000
+        Timeout < 2000 -> CheckedTimeout = 2000;
+        true -> CheckedTimeout = NewTimeout
       end,
-      log(Name, "New intervall is is ~p", [Timeout]),
-      % reset batch counter
-      BatchNum = 0,
+      log(Name, "New intervall is ~p", [Timeout]),
       % get unique message without send message ( Requirement 11. )
-      getMessageId(Name, fun() -> noop end),
+      getMessageId(Name, fun(Number) ->
+        log(Name, "Requested but forgot to send message with ID ~p", [Number])
+      end),
       % now read all messages
-      getMessages(false, Name, SendMessageSL)
-  end,
-  sendloop(Name, Timeout, BatchNum, Count, SendMessageSL).
+      getMessages(0, Name, SendMessageSL),
+      % send after time
+      apply_after(Timeout, client, prepAndSendMsg, [Name, Timeout, 0, Count, SendMessageSL]);
+    true ->
+      apply_after(Timeout, client, prepAndSendMsg, [Name, Timeout, BatchNum + 1, Count, SendMessageSL])
+  end.
 
 %%%-------------------------------------------------------------------
 %%% Build the real message string and calls sendMessageWithId
 %%%-------------------------------------------------------------------
-prepAndSendMsg(Name, Nr, SendMessageSL) ->
+prepAndSendMsg(Name, Timeout, BatchNr, Count, SendMessageSL) ->
   {ok, Hostname} = inet:gethostname(),
-  SendParams = [Name, Hostname, self(), ?PRAKNR, ?TEAMNR, Nr, date()],
+  SendParams = [Name, Hostname, self(), ?PRAKNR, ?TEAMNR, Count, date()],
   % Misterious: C 769 (22)
   % 0-client@lab18-<0.1313.0>-C-1-03: 22te_Nachricht. Sendezeit: 16.05 18:01:30,769|(22)
   FormatStr = "~s@~s-~p-C-~d-~d: ~dte_Nachricht. Sendezeit: ~p",
   Msg = io_lib:format(FormatStr, SendParams),
-  sendMessageWithId(Name, Msg, SendMessageSL).
+  io:format(Msg),
+  sendMessageWithId(Name, Msg, SendMessageSL, Timeout, BatchNr, Count).
 
 %%%-------------------------------------------------------------------
 %%% Send a message
 %%% First get a new message ID from server
 %%%-------------------------------------------------------------------
-sendMessageWithId(Name, Msg, SendMessageSL) ->
+sendMessageWithId(Name, Msg, SendMessageSL, Timeout, BatchNr, Count) ->
   Servername = getServerName(),
   Server = global:whereis_name(Servername),
   getMessageId(Name, fun(Number) ->
@@ -102,7 +104,8 @@ sendMessageWithId(Name, Msg, SendMessageSL) ->
       getMessageId(Name, fun(Number) ->
         Server ! {new_message, {Msg, Number}},
         werkzeug:pushSL(SendMessageSL, {Msg, Number}),
-        log(Name, "Sending message ~s ( ID: ~p )", [Msg, Number])
+        log(Name, "Sending message ~s ( ID: ~p )", [Msg, Number]),
+        sendloop(Name, Timeout, BatchNr, Count + 1, SendMessageSL)
       end)
   end).
 
@@ -110,10 +113,6 @@ sendMessageWithId(Name, Msg, SendMessageSL) ->
 %%% Request a new message ID from teh server
 %%%-------------------------------------------------------------------
 getMessageId(Name, Callback) ->
-  % make sure callback is a alid function
-  if
-    not is_function(Callback) -> Callback = fun() -> noop end
-  end,
   Servername = getServerName(),
   Server = global:whereis_name(Servername),
   % request new message id
@@ -127,16 +126,17 @@ getMessageId(Name, Callback) ->
 %%%-------------------------------------------------------------------
 %%% Get messages
 %%%-------------------------------------------------------------------
-getMessages(false, Name, SendMessageSL) ->
+getMessages(0, Name, SendMessageSL) ->
   Servername = getServerName(),
-  Servername ! { query_messages, self()},
+  Server = global:whereis_name(Servername),
+  Server ! { query_messages, self()},
   receive
     { message, Number,Nachricht,Terminated} ->
       % Requirement 12. -> append ***** on messages send by this client
       printMessage(Name, Nachricht, Number, werkzeug:findSL(SendMessageSL, Number)),
       getMessages(Terminated, Name, SendMessageSL)
   end;
-getMessages(true, Name, SendMessageSL) ->
+getMessages(1, Name, SendMessageSL) ->
   log(Name, "All messages received."),
   noop.
 
@@ -183,6 +183,7 @@ getClientcount() ->
 %%%-------------------------------------------------------------------
 log(Name, Msg) ->
   Logfilename = io_lib:format("~s@~p.log", [Name, self()]),
+  erlang:append(Msg, "\n"),
   werkzeug:logging(Logfilename, Msg).
 log(Name, Msg, Params) ->
-  log(Name, io_lib:format(erlang:append(Msg, "\n"), Params)).
+  log(Name, io_lib:format(Msg, Params)).

@@ -12,7 +12,7 @@
 -export([start/0]).
 
 %% Imports
--import(werkzeug, [logging/2,get_config_value/2,lengthSL/1]).
+-import(werkzeug, [get_config_value/2,lengthSL/1]).
 -import(erlang, [append/2]).
 
 %%%-------------------------------------------------------------------
@@ -35,19 +35,25 @@ loop(H,D,Uid) ->
     {query_messages, Client} ->
       log("query_messages"),
       {Number, Nachricht} = getMessage(H,D),
-      Client ! { message, 1,"TEST",1};
+      Client ! { message, Number,Nachricht,isTerminat(werkzeug:lengthSL(D))},
+      loop(H,D,Uid);
 
     {new_message, {Nachricht, Number}} ->
-      logging("NServer.log", "new_message"),
+      log("new_message"),
       % save message if id is unique
-      saveMessage(H, D, Number, Nachricht, werkzeug:findSL(D, Number), werkzeug:findSL(H, Number));
+      saveMessage(H, D, Number, Nachricht, werkzeug:findSL(D, Number), werkzeug:findSL(H, Number)),
+      loop(H,D,Uid);
 
     {query_msgid, Client} ->
-      logging("NServer.log", "query_msgid"),
+      log("query_msgid"),
       Client ! { msgid, Uid},
-      Uid = Uid + 1
-  end,
-  loop(H,D,Uid).
+      loop(H,D,Uid + 1)
+  end.
+
+isTerminat(0) ->
+  1;
+isTerminat(L) ->
+  0.
 
 %%%-------------------------------------------------------------------
 %%% Save a new message
@@ -71,17 +77,23 @@ saveMessage(H, D, Number, Nachricht, {In1, St1}, {In2, St2}) ->
 %%% Return the next message to deliver
 %%%-------------------------------------------------------------------
 getMessage(H, D) ->
-  {Number, Nachricht} =
-  rearrengeMsg(D, werkzeug:popSL(H)),
+  {Number, Nachricht} = getSendingMessage(D, werkzeug:minNrSL(D)),
+  rearrengeMsg(D,H,werkzeug:minNrSL(H)),
   {Number, Nachricht}.
+getSendingMessage(D, -1) ->
+  {-1, "Empty message"};
+getSendingMessage(D, Nr) ->
+  werkzeug:findSL(D, Nr).
 
 %%%-------------------------------------------------------------------
 %%% Put a message into the given queue
 %%%-------------------------------------------------------------------
-rearrengeMsg(D, {Number, Nachricht}) ->
-  werkzeug:pushSL(D, {Number, Nachricht});
-rearrengeMsg(D, Z) ->
-  noop.
+rearrengeMsg(D,H,-1) ->
+  noop;
+rearrengeMsg(D,H,Nr) ->
+  MoveBlock = werkzeug:findSL(H, Nr),
+  werkzeug:popSL(H),
+  werkzeug:pushSL(D, MoveBlock).
 
 %%%-------------------------------------------------------------------
 %%% Read a config option
@@ -98,6 +110,7 @@ getConfigOption(Configname) ->
 %%%-------------------------------------------------------------------
 log(Msg) ->
   Logfilename = io_lib:format("NServer@~p.log", [self()]),
+  erlang:append(Msg, "\n"),
   werkzeug:logging(Logfilename, Msg).
 log(Msg, Params) ->
   log(io_lib:format(Msg, Params)).
