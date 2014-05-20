@@ -9,7 +9,7 @@
 -author("moritzspindelhirn").
 
 %% API
--export([start/1]).
+-export([start/0]).
 
 %% Imports
 -import(werkzeug, [get_config_value/2]).
@@ -24,7 +24,16 @@
 %%% first set lifetime timer
 %%% then start loop
 %%%-------------------------------------------------------------------
-start(Name) ->
+start() ->
+  Clientcount = getClientcount(),
+  start(Clientcount).
+start(0) ->
+  noop;
+start(Clientcount) ->
+  startSingle(io_lib:format("client-~p", [Clientcount])),
+  start(Clientcount - 1).
+
+startSingle(Name) ->
   Sendintervall = getSendinterval(),
   SendintervallMs = Sendintervall * 1000,
   Lifetime = getLifetime(),
@@ -65,7 +74,7 @@ sendloop(Name, Timeout, BatchNum, Count, SendMessageSL) ->
       % get unique message without send message ( Requirement 11. )
       getMessageId(Name, fun() -> noop end),
       % now read all messages
-      getMessages(Name, SendMessageSL)
+      getMessages(false, Name, SendMessageSL)
   end,
   sendloop(Name, Timeout, BatchNum, Count, SendMessageSL).
 
@@ -118,24 +127,24 @@ getMessageId(Name, Callback) ->
 %%%-------------------------------------------------------------------
 %%% Get messages
 %%%-------------------------------------------------------------------
-getMessages(Name, SendMessageSL) ->
+getMessages(false, Name, SendMessageSL) ->
   Servername = getServerName(),
   Servername ! { query_messages, self()},
   receive
     { message, Number,Nachricht,Terminated} ->
       % Requirement 12. -> append ***** on messages send by this client
-      if
-        werkzeug:findSL(SendMessageSL, Number) = {-1, nok} ->
-          log(Name, "Received: ~s ( ID: ~p )", [Nachricht, Number]);
-        true ->
-          append(Nachricht, "*******"),
-          log(Name, "Received: ~s ( ID: ~p )", [Nachricht, Number])
-      end,
-      if
-        not Terminated ->
-          getMessages(Name, SendMessageSL)
-      end
-  end.
+      printMessage(Name, Nachricht, Number, werkzeug:findSL(SendMessageSL, Number)),
+      getMessages(Terminated, Name, SendMessageSL)
+  end;
+getMessages(true, Name, SendMessageSL) ->
+  log(Name, "All messages received."),
+  noop.
+
+printMessage(Name, Nachricht, Number, {-1, nok}) ->
+  log(Name, "Received: ~s ( ID: ~p )", [Nachricht, Number]);
+printMessage(Name, Nachricht, Number, {Index, ok}) ->
+  erlang:append(Nachricht, "*******"),
+  log(Name, "Received: ~s ( ID: ~p )", [Nachricht, Number]).
 
 %%%-------------------------------------------------------------------
 %%% Get Server name from config
@@ -162,10 +171,18 @@ getLifetime() ->
   Lifetime.
 
 %%%-------------------------------------------------------------------
+%%% Get number of clients from config
+%%%-------------------------------------------------------------------
+getClientcount() ->
+  {ok, ConfigListe} = file:consult("client.cfg"),
+  {ok, Clientcount} = get_config_value(clients, ConfigListe),
+  Clientcount.
+
+%%%-------------------------------------------------------------------
 %%% Logging
 %%%-------------------------------------------------------------------
 log(Name, Msg) ->
   Logfilename = io_lib:format("~s@~p.log", [Name, self()]),
   werkzeug:logging(Logfilename, Msg).
 log(Name, Msg, Params) ->
-  log(Name, io_lib:format(append(Msg, "\n"), Params)).
+  log(Name, io_lib:format(erlang:append(Msg, "\n"), Params)).
