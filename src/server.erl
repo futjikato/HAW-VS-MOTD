@@ -34,22 +34,13 @@ loop(H,D,Uid) ->
   receive
     {query_messages, Client} ->
       log("query_messages"),
+      {Number, Nachricht} = getMessage(H,D),
       Client ! { message, 1,"TEST",1};
 
     {new_message, {Nachricht, Number}} ->
       logging("NServer.log", "new_message"),
-      {ok, ConfigListe} = file:consult("server.cfg"),
-      {ok, DeliverQueueLimit} = get_config_value(dlqlimit, ConfigListe),
-      % check if Number is unique
-      if
-        werkzeug:findSL(D, Number) = {-1,nok} and werkzeug:findSL(H, Number) = {-1, nok} ->
-          Dlength = lengthSL(D),
-          % check where to add the message to Holdqueue or Deliveryqueue
-          if
-            Dlength > DeliverQueueLimit -> werkzeug:pushSL(H, {Number, Nachricht});
-            true -> werkzeug:pushSL(D, {Number, Nachricht})
-          end
-      end;
+      % save message if id is unique
+      saveMessage(H, D, Number, Nachricht, werkzeug:findSL(D, Number), werkzeug:findSL(H, Number));
 
     {query_msgid, Client} ->
       logging("NServer.log", "query_msgid"),
@@ -57,6 +48,48 @@ loop(H,D,Uid) ->
       Uid = Uid + 1
   end,
   loop(H,D,Uid).
+
+%%%-------------------------------------------------------------------
+%%% Save a new message
+%%%-------------------------------------------------------------------
+saveMessage(H, D, Number, Nachricht, {-1,nok}, {-1,nok}) ->
+  DeliverQueueLimit = getConfigOption(dlqlimit),
+  % push message into deliverqueue
+  werkzeug:pushSL(D, {Number, Nachricht}),
+  % get length of deliverqueue
+  Dlength = lengthSL(D),
+  % check if D is greater then allowed if so pop last elem into Holdqueue.
+  if
+    Dlength > DeliverQueueLimit ->
+      werkzeug:pushSL(H, werkzeug:popfiSL(D))
+  end;
+% if message id already exists in the H or D queue
+saveMessage(H, D, Number, Nachricht, {In1, St1}, {In2, St2}) ->
+  noop.
+
+%%%-------------------------------------------------------------------
+%%% Return the next message to deliver
+%%%-------------------------------------------------------------------
+getMessage(H, D) ->
+  {Number, Nachricht} =
+  rearrengeMsg(D, werkzeug:popSL(H)),
+  {Number, Nachricht}.
+
+%%%-------------------------------------------------------------------
+%%% Put a message into the given queue
+%%%-------------------------------------------------------------------
+rearrengeMsg(D, {Number, Nachricht}) ->
+  werkzeug:pushSL(D, {Number, Nachricht});
+rearrengeMsg(D, Z) ->
+  noop.
+
+%%%-------------------------------------------------------------------
+%%% Read a config option
+%%%-------------------------------------------------------------------
+getConfigOption(Configname) ->
+  {ok, ConfigListe} = file:consult("client.cfg"),
+  {ok, Configvalue} = get_config_value(Configname, ConfigListe),
+  Configvalue.
 
 %%%-------------------------------------------------------------------
 %%% Logging
