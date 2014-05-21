@@ -31,27 +31,30 @@ start() ->
 loop(H,D,C,Uid) ->
   receive
     {query_messages, Client} ->
-      log("query_messages~n"),
       {Number, Nachricht} = getMessage(Client,C,D),
-      Client ! { message, Number,Nachricht,isTerminat(werkzeug:lengthSL(D))},
+      Client ! { message, Number,Nachricht,isTerminat(Number, D)},
+      log("Nachricht ~p an ~p gesendet~n", [Nachricht, Client]),
       loop(H,D,C,Uid);
 
     {new_message, {Nachricht, Number}} ->
-      log("new_message~n"),
+      log("Nachricht ~p bekommen : ~p~n", [Number, Nachricht]),
       % save message if id is unique
       saveMessage(H, D, Number, Nachricht),
       loop(H,D,C,Uid);
 
     {query_msgid, Client} ->
-      log("query_msgid~n"),
+      log("Nachrichtennummer ~p gesendet ~p~n", [Uid + 1, Client]),
       Client ! { msgid, Uid},
       loop(H,D,C,Uid + 1)
   end.
 
-isTerminat(0) ->
-  1;
-isTerminat(_L) ->
-  0.
+isTerminat(Nr, [{LastNr, _LastMsg}|_Tail]) ->
+  if
+    Nr == LastNr ->
+      1;
+    true ->
+      0
+  end.
 
 %%%-------------------------------------------------------------------
 %%% Save a new message

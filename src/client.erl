@@ -72,7 +72,7 @@ sendloop(Name, Timeout, BatchNum, Count, SendMessageSL) ->
         log(Name, "Requested but forgot to send message with ID ~p~n", [Number])
       end),
       % now read all messages
-      getMessages(0, Name, SendMessageSL),
+      getMessages(false, Name, SendMessageSL),
       % send after time
       timer:sleep(CheckedTimeout),
       prepAndSendMsg(Name, CheckedTimeout, 0, Count + 1, SendMessageSL);
@@ -87,7 +87,7 @@ sendloop(Name, Timeout, BatchNum, Count, SendMessageSL) ->
 prepAndSendMsg(Name, Timeout, BatchNr, Count, SendMessageSL) ->
   % Misterious: C 769 (22)
   % 0-client@lab18-<0.1313.0>-C-1-03: 22te_Nachricht. Sendezeit: 16.05 18:01:30,769|(22)
-  Msg = io_lib:format("~s@~s-~p-C-~p-~p: ~pte_Nachricht. Sendezeit: ~p", [Name, "Hostname", self(), ?PRAKNR, ?TEAMNR, Count, date()]),
+  Msg = io_lib:format("~s@~s-~p-C-~p-~p: ~pte_Nachricht. Sendezeit: ~p", [Name, "Hostname", self(), ?PRAKNR, ?TEAMNR, Count, werkzeug:timeMilliSecond()]),
   sendMessageWithId(Name, Msg, SendMessageSL, Timeout, BatchNr, Count),
   true.
 
@@ -122,7 +122,7 @@ getMessageId(Name, Callback) ->
 %%%-------------------------------------------------------------------
 %%% Get messages
 %%%-------------------------------------------------------------------
-getMessages(0, Name, SendMessageSL) ->
+getMessages(false, Name, SendMessageSL) ->
   Servername = getServerName(),
   Server = global:whereis_name(Servername),
   Server ! { query_messages, self()},
@@ -132,7 +132,7 @@ getMessages(0, Name, SendMessageSL) ->
       printMessage(Name, Nachricht, Number, werkzeug:findSL(SendMessageSL, Number)),
       getMessages(Terminated, Name, SendMessageSL)
   end;
-getMessages(1, Name, _) ->
+getMessages(true, Name, _) ->
   log(Name, "All messages received.~n"),
   noop.
 
