@@ -19,10 +19,8 @@
 %%% Start the server
 %%%-------------------------------------------------------------------
 start() ->
-  H = [],
-  D = [],
-  ServerPid = spawn(fun() -> loop(H,D,0) end),
-  log("Server started with PID ~p\n", [ServerPid]),
+  ServerPid = spawn(fun() -> loop([],[],[],0) end),
+  log("Server started with PID ~p~n", [ServerPid]),
   {ok, ConfigListe} = file:consult("server.cfg"),
 	{ok, Servername} = get_config_value(servername, ConfigListe),
   global:register_name(Servername,ServerPid).
@@ -30,76 +28,93 @@ start() ->
 %%%-------------------------------------------------------------------
 %%% Server loop
 %%%-------------------------------------------------------------------
-loop(H,D,Uid) ->
+loop(H,D,C,Uid) ->
   receive
     {query_messages, Client} ->
-      log("query_messages"),
-      {Number, Nachricht} = getMessage(H,D),
+      log("query_messages~n"),
+      {Number, Nachricht} = getMessage(Client,C,D),
       Client ! { message, Number,Nachricht,isTerminat(werkzeug:lengthSL(D))},
-      loop(H,D,Uid);
+      loop(H,D,C,Uid);
 
     {new_message, {Nachricht, Number}} ->
-      log("new_message"),
+      log("new_message~n"),
       % save message if id is unique
-      saveMessage(H, D, Number, Nachricht, werkzeug:findSL(D, Number), werkzeug:findSL(H, Number)),
-      loop(H,D,Uid);
+      saveMessage(H, D, Number, Nachricht),
+      loop(H,D,C,Uid);
 
     {query_msgid, Client} ->
-      log("query_msgid"),
+      log("query_msgid~n"),
       Client ! { msgid, Uid},
-      loop(H,D,Uid + 1)
+      loop(H,D,C,Uid + 1)
   end.
 
 isTerminat(0) ->
   1;
-isTerminat(L) ->
+isTerminat(_L) ->
   0.
 
 %%%-------------------------------------------------------------------
 %%% Save a new message
 %%%-------------------------------------------------------------------
-saveMessage(H, D, Number, Nachricht, {-1,nok}, {-1,nok}) ->
-  DeliverQueueLimit = getConfigOption(dlqlimit),
-  % push message into deliverqueue
-  werkzeug:pushSL(D, {Number, Nachricht}),
+saveMessage(H, D, Number, Nachricht) ->
+  % push message into holdbackqueu
+  werkzeug:pushSL(H, {Number, Nachricht}),
   % get length of deliverqueue
-  Dlength = lengthSL(D),
+  Hlength = lengthSL(H),
   % check if D is greater then allowed if so pop last elem into Holdqueue.
+  DeliverQueueLimit = getConfigOption(dlqlimit),
   if
-    Dlength > DeliverQueueLimit ->
-      werkzeug:pushSL(H, werkzeug:popfiSL(D))
-  end;
-% if message id already exists in the H or D queue
-saveMessage(H, D, Number, Nachricht, {In1, St1}, {In2, St2}) ->
-  noop.
+    Hlength >= (DeliverQueueLimit div 2) ->
+      rearrengeList(D,H);
+    true ->
+      noop
+  end.
 
 %%%-------------------------------------------------------------------
 %%% Return the next message to deliver
 %%%-------------------------------------------------------------------
-getMessage(H, D) ->
-  {Number, Nachricht} = getSendingMessage(D, werkzeug:minNrSL(D)),
-  rearrengeMsg(D,H,werkzeug:minNrSL(H)),
-  {Number, Nachricht}.
-getSendingMessage(D, -1) ->
-  {-1, "Empty message"};
-getSendingMessage(D, Nr) ->
-  werkzeug:findSL(D, Nr).
+getMessage(Client,C,D) ->
+  NextMsgNr = getLastMsgSendToClient(Client,C,C),
+  {MsgNr,Msg} = werkzeug:findneSL(D, NextMsgNr),
+  setLastMsgSendToClient(Client,MsgNr,C,C),
+  {MsgNr, Msg}.
 
 %%%-------------------------------------------------------------------
 %%% Put a message into the given queue
 %%%-------------------------------------------------------------------
-rearrengeMsg(D,H,-1) ->
+rearrengeList(_,[]) ->
   noop;
-rearrengeMsg(D,H,Nr) ->
-  MoveBlock = werkzeug:findSL(H, Nr),
-  werkzeug:popSL(H),
-  werkzeug:pushSL(D, MoveBlock).
+rearrengeList(D,[{MsgNr, Msg}]) ->
+  DeliverQueueLimit = getConfigOption(dlqlimit),
+  Dlength = werkzeug:lengthSL(D),
+  if
+    Dlength >= DeliverQueueLimit ->
+      werkzeug:popSL(D);
+    true ->
+      noop
+  end,
+  werkzeug:pushSL(D, {MsgNr, Msg});
+rearrengeList(D,[{MsgNr, Msg}|Tail]) ->
+  {LastDNr, _} = werkzeug:findSL(D, werkzeug:maxNrSL(D)),
+  if
+    MsgNr == LastDNr + 1 ->
+      DeliverQueueLimit = getConfigOption(dlqlimit),
+      Dlength = werkzeug:lengthSL(D),
+      if
+        Dlength >= DeliverQueueLimit ->
+          werkzeug:popSL(D);
+        true ->
+          noop
+      end,
+      werkzeug:pushSL(D, {MsgNr, Msg}),
+      rearrengeList(D, Tail)
+  end.
 
 %%%-------------------------------------------------------------------
 %%% Read a config option
 %%%-------------------------------------------------------------------
 getConfigOption(Configname) ->
-  {ok, ConfigListe} = file:consult("client.cfg"),
+  {ok, ConfigListe} = file:consult("server.cfg"),
   {ok, Configvalue} = get_config_value(Configname, ConfigListe),
   Configvalue.
 
@@ -110,7 +125,63 @@ getConfigOption(Configname) ->
 %%%-------------------------------------------------------------------
 log(Msg) ->
   Logfilename = io_lib:format("NServer@~p.log", [self()]),
-  erlang:append(Msg, "\n"),
-  werkzeug:logging(Logfilename, Msg).
+  werkzeug:logging(Logfilename, io_lib:format(Msg, [])).
 log(Msg, Params) ->
   log(io_lib:format(Msg, Params)).
+
+getLastMsgSendToClient(Client, [{Process,Nr,_}], List) ->
+  if
+    Process == Client ->
+      Nr;
+    true ->
+      erlang:append(List, {Client,0,now()})
+  end;
+getLastMsgSendToClient(Client, [{Process,Nr,_}|Tail], List) ->
+  if
+    Process == Client ->
+      Nr;
+    true ->
+      getLastMsgSendToClient(Client, Tail, List)
+  end;
+getLastMsgSendToClient(_, [], _) ->
+  0.
+
+setLastMsgSendToClient(Client, Nr, [{Process,OldNr,OldTs}], List) ->
+  if
+    Process =:= Client ->
+      Ts = now(),
+      Lifetime = getConfigOption(clientlifetime),
+      timer:apply_after(Lifetime * 1000, client, deleteClient, [Client, Ts, List]),
+      [{Process,Nr,Ts}];
+    true ->
+      [{Process,OldNr,OldTs}]
+  end;
+setLastMsgSendToClient(Client, Nr, [{Process,OldNr,OldTs}|Tail], List) ->
+  if
+    Process =:= Client ->
+      Ts = now(),
+      Lifetime = getConfigOption(clientlifetime),
+      timer:apply_after(Lifetime * 1000, client, deleteClient, [Client, Ts, List]),
+      [{Process,Nr,Ts}|Tail];
+    true ->
+      [{Process,OldNr,OldTs}|setLastMsgSendToClient(Client, Nr, Tail, List)]
+  end;
+setLastMsgSendToClient(_Client, _Nr, [], _List) ->
+  [].
+
+deleteClient(Client,Ts,[{Process,_Nr,STs}]) ->
+  if
+    Process =:= Client andalso Ts =:= STs ->
+      [];
+    true ->
+      [{Process,_Nr,STs}]
+  end;
+deleteClient(Client,Ts,[{Process,_Nr,STs}|Tail]) ->
+  if
+    Process =:= Client andalso Ts =:= STs ->
+      [Tail];
+    true ->
+      [{Process,_Nr,STs}|deleteClient(Client, Ts, Tail)]
+  end;
+deleteClient(_Client,_Ts,[]) ->
+ [].
