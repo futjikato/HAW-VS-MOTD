@@ -39,8 +39,8 @@ loop(H,D,C,Uid) ->
     {new_message, {Nachricht, Number}} ->
       log("Nachricht ~p bekommen : ~p~n", [Number, Nachricht]),
       % save message if id is unique
-      saveMessage(H, D, Number, Nachricht),
-      loop(H,D,C,Uid);
+      {NewH, NewD} = saveMessage(H, D, Number, Nachricht),
+      loop(NewH,NewD,C,Uid);
 
     {query_msgid, Client} ->
       log("Nachrichtennummer ~p gesendet ~p~n", [Uid + 1, Client]),
@@ -48,12 +48,21 @@ loop(H,D,C,Uid) ->
       loop(H,D,C,Uid + 1)
   end.
 
-isTerminat(Nr, [{LastNr, _LastMsg}|_Tail]) ->
+isTerminat(_Nr, []) ->
+  true;
+isTerminat(Nr, [{LastNr, _LastMsg}]) ->
   if
     Nr == LastNr ->
-      1;
+      true;
     true ->
-      0
+      false
+  end;
+isTerminat(Nr, [{LastNr, _LastMsg}|Tail]) ->
+  if
+    Nr == LastNr ->
+      true;
+    true ->
+      isTerminat(Nr, Tail)
   end.
 
 %%%-------------------------------------------------------------------
@@ -61,16 +70,19 @@ isTerminat(Nr, [{LastNr, _LastMsg}|_Tail]) ->
 %%%-------------------------------------------------------------------
 saveMessage(H, D, Number, Nachricht) ->
   % push message into holdbackqueu
-  werkzeug:pushSL(H, {Number, Nachricht}),
+  NewH = werkzeug:pushSL(H, {Number, Nachricht}),
   % get length of deliverqueue
-  Hlength = lengthSL(H),
+  Hlength = erlang:length(NewH),
   % check if D is greater then allowed if so pop last elem into Holdqueue.
   DeliverQueueLimit = getConfigOption(dlqlimit),
+  log("~p >= ~p~n", [Hlength, DeliverQueueLimit div 2]),
   if
     Hlength >= (DeliverQueueLimit div 2) ->
-      rearrengeList(D,H);
+      log("Nachricht umschichten.~n"),
+      {NewD, NewNewH} = rearrengeList(D,NewH),
+      {NewD, NewNewH};
     true ->
-      noop
+      {D, NewH}
   end.
 
 %%%-------------------------------------------------------------------
@@ -85,8 +97,8 @@ getMessage(Client,C,D) ->
 %%%-------------------------------------------------------------------
 %%% Put a message into the given queue
 %%%-------------------------------------------------------------------
-rearrengeList(_,[]) ->
-  noop;
+rearrengeList(D,[]) ->
+  {D, []};
 rearrengeList(D,[{MsgNr, Msg}]) ->
   DeliverQueueLimit = getConfigOption(dlqlimit),
   Dlength = werkzeug:lengthSL(D),
@@ -96,7 +108,8 @@ rearrengeList(D,[{MsgNr, Msg}]) ->
     true ->
       noop
   end,
-  werkzeug:pushSL(D, {MsgNr, Msg});
+  NewD = werkzeug:pushSL(D, {MsgNr, Msg}),
+  {NewD, []};
 rearrengeList(D,[{MsgNr, Msg}|Tail]) ->
   {LastDNr, _} = werkzeug:findSL(D, werkzeug:maxNrSL(D)),
   if
@@ -109,8 +122,11 @@ rearrengeList(D,[{MsgNr, Msg}|Tail]) ->
         true ->
           noop
       end,
-      werkzeug:pushSL(D, {MsgNr, Msg}),
-      rearrengeList(D, Tail)
+      NewD = werkzeug:pushSL(D, {MsgNr, Msg}),
+      {SuperNewD, NewTail} = rearrengeList(NewD, Tail),
+      {SuperNewD, NewTail};
+    true ->
+      {D,[{MsgNr, Msg}|Tail]}
   end.
 
 %%%-------------------------------------------------------------------
