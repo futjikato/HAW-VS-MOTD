@@ -45,7 +45,11 @@ loop(H,D,C,Uid) ->
     {query_msgid, Client} ->
       log("Nachrichtennummer ~p gesendet ~p~n", [Uid + 1, Client]),
       Client ! { msgid, Uid},
-      loop(H,D,C,Uid + 1)
+      loop(H,D,C,Uid + 1);
+
+    {remove_client, Client} ->
+      NewC = deleteClient(Client, C),
+      loop(H,D,NewC,Uid)
   end.
 
 isTerminat(_Nr, []) ->
@@ -165,42 +169,42 @@ getLastMsgSendToClient(Client, [{Process,Nr,_}|Tail], List) ->
 getLastMsgSendToClient(_, [], _) ->
   0.
 
-setLastMsgSendToClient(Client, Nr, [{Process,OldNr,OldTs}], List) ->
+setLastMsgSendToClient(Client, Nr, [{Process,OldNr,OldTimer}]) ->
   if
     Process =:= Client ->
-      Ts = now(),
       Lifetime = getConfigOption(clientlifetime),
-      timer:apply_after(Lifetime * 1000, client, deleteClient, [Client, Ts, List]),
-      [{Process,Nr,Ts}];
+      NewTimer = werkzeug:reset_timer(OldTimer, Lifetime, {remove_client, Client}),
+      [{Process,Nr,NewTimer}];
     true ->
-      [{Process,OldNr,OldTs}]
+      [{Process,OldNr,OldTimer}|setLastMsgSendToClient(Client, Nr, [])]
   end;
-setLastMsgSendToClient(Client, Nr, [{Process,OldNr,OldTs}|Tail], List) ->
+setLastMsgSendToClient(Client, Nr, [{Process,OldNr,OldTimer}|Tail]) ->
   if
     Process =:= Client ->
-      Ts = now(),
       Lifetime = getConfigOption(clientlifetime),
-      timer:apply_after(Lifetime * 1000, client, deleteClient, [Client, Ts, List]),
-      [{Process,Nr,Ts}|Tail];
+      NewTimer = werkzeug:reset_timer(OldTimer, Lifetime, {remove_client, Client}),
+      [{Process,Nr,NewTimer}|Tail];
     true ->
-      [{Process,OldNr,OldTs}|setLastMsgSendToClient(Client, Nr, Tail, List)]
+      [{Process,OldNr,OldTimer}|setLastMsgSendToClient(Client, Nr, Tail)]
   end;
-setLastMsgSendToClient(_Client, _Nr, [], _List) ->
-  [].
+setLastMsgSendToClient(Client, Nr, []) ->
+  Lifetime = getConfigOption(clientlifetime),
+  {ok, Timer} = timer:send_after(Lifetime * 1000, {remove_client, Client}),
+  [{Client,Nr,Timer}].
 
-deleteClient(Client,Ts,[{Process,_Nr,STs}]) ->
+deleteClient(Client,[{Process,Nr,Timer}]) ->
   if
-    Process =:= Client andalso Ts =:= STs ->
+    Process =:= Client ->
       [];
     true ->
-      [{Process,_Nr,STs}]
+      [{Process,Nr,Timer}]
   end;
-deleteClient(Client,Ts,[{Process,_Nr,STs}|Tail]) ->
+deleteClient(Client,[{Process,Nr,Timer}|Tail]) ->
   if
-    Process =:= Client andalso Ts =:= STs ->
+    Process =:= Client ->
       [Tail];
     true ->
-      [{Process,_Nr,STs}|deleteClient(Client, Ts, Tail)]
+      [{Process,Nr,Timer}|deleteClient(Client, Tail)]
   end;
-deleteClient(_Client,_Ts,[]) ->
+deleteClient(_Client,[]) ->
  [].
