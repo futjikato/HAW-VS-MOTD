@@ -87,7 +87,7 @@ sendloop(Name, Timeout, BatchNum, Count, SendMessageSL) ->
 prepAndSendMsg(Name, Timeout, BatchNr, Count, SendMessageSL) ->
   % Misterious: C 769 (22)
   % 0-client@lab18-<0.1313.0>-C-1-03: 22te_Nachricht. Sendezeit: 16.05 18:01:30,769|(22)
-  Msg = io_lib:format("~s@~s-~p-C-~p-~p: ~pte_Nachricht. Sendezeit: ~p", [Name, "Hostname", self(), ?PRAKNR, ?TEAMNR, Count, werkzeug:timeMilliSecond()]),
+  Msg = io_lib:format("~s@~s-~p-C-~p-~p: ~pte_Nachricht. Sendezeit: ~s", [Name, "Hostname", self(), ?PRAKNR, ?TEAMNR, Count, werkzeug:timeMilliSecond()]),
   sendMessageWithId(Name, Msg, SendMessageSL, Timeout, BatchNr, Count),
   true.
 
