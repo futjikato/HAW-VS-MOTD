@@ -1,0 +1,37 @@
+Received message number 27
+Sending message client-7@lab26-<0.3215.0>-C-3-99: 1te_Nachricht. Sendezeit: "21.05 16:11:56,293|" ( ID: 27 )
+Received message number 47
+Sending message client-7@lab26-<0.3215.0>-C-3-99: 3te_Nachricht. Sendezeit: "21.05 16:12:01,301|" ( ID: 47 )
+Received message number 68
+Sending message client-7@lab26-<0.3215.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|" ( ID: 68 )
+Received message number 85
+Sending message client-7@lab26-<0.3215.0>-C-3-99: 7te_Nachricht. Sendezeit: "21.05 16:12:11,317|" ( ID: 85 )
+Received message number 103
+Sending message client-7@lab26-<0.3215.0>-C-3-99: 9te_Nachricht. Sendezeit: "21.05 16:12:16,324|" ( ID: 103 )
+Received message number 121
+Sending message client-7@lab26-<0.3215.0>-C-3-99: 11te_Nachricht. Sendezeit: "21.05 16:12:21,329|" ( ID: 121 )
+New intervall is 5000
+Received message number 127
+Requested but forgot to send message with ID 127
+Received: 5-client@lab25-<0.91.0>-C-9-09: 40te_Nachricht. C Out: 21.05 16:12:01,538|(40); HBQ In: 21.05 16:12:01,539| DLQ In:21.05 16:12:06,318| ( ID: 40 )
+Received: 7-client@lab25-<0.89.0>-C-9-09: 41te_Nachricht. C Out: 21.05 16:12:01,538|(41); HBQ In: 21.05 16:12:01,538| DLQ In:21.05 16:12:06,318| ( ID: 41 )
+Received: 8-client@lab25-<0.88.0>-C-9-09: 42te_Nachricht. C Out: 21.05 16:12:01,538|(42); HBQ In: 21.05 16:12:01,539| DLQ In:21.05 16:12:06,318| ( ID: 42 )
+Received: 4-client@lab25-<0.92.0>-C-9-09: 43te_Nachricht. C Out: 21.05 16:12:01,538|(43); HBQ In: 21.05 16:12:01,538| DLQ In:21.05 16:12:06,318| ( ID: 43 )
+Received: 9-client@lab25-<0.87.0>-C-9-09: 44te_Nachricht. C Out: 21.05 16:12:01,538|(44); HBQ In: 21.05 16:12:01,538| DLQ In:21.05 16:12:06,318| ( ID: 44 )
+Received: client-9@lab26-<0.3213.0>-C-3-99: 3te_Nachricht. Sendezeit: "21.05 16:12:01,301|"(45); HBQ In: 21.05 16:12:01,308| DLQ In:21.05 16:12:06,318| ( ID: 45 )
+Received: client-8@lab26-<0.3214.0>-C-3-99: 3te_Nachricht. Sendezeit: "21.05 16:12:01,301|"(46); HBQ In: 21.05 16:12:01,308| DLQ In:21.05 16:12:06,318| ( ID: 46 )
+Received: client-7@lab26-<0.3215.0>-C-3-99: 3te_Nachricht. Sendezeit: "21.05 16:12:01,301|"(47); HBQ In: 21.05 16:12:01,308| DLQ In:21.05 16:12:06,318| ( ID: 47 )
+Received: client-5@lab26-<0.3217.0>-C-3-99: 3te_Nachricht. Sendezeit: "21.05 16:12:01,301|"(48); HBQ In: 21.05 16:12:01,308| DLQ In:21.05 16:12:06,318| ( ID: 48 )
+Received: client-3@lab26-<0.3219.0>-C-3-99: 3te_Nachricht. Sendezeit: "21.05 16:12:01,302|"(49); HBQ In: 21.05 16:12:01,308| DLQ In:21.05 16:12:06,318| ( ID: 49 )
+Received: 6-client@lab25-<0.90.0>-C-9-09: 58te_Nachricht. C Out: 21.05 16:12:06,542|(58); HBQ In: 21.05 16:12:06,542| DLQ In:21.05 16:12:11,326| ( ID: 58 )
+Received: 5-client@lab25-<0.91.0>-C-9-09: 59te_Nachricht. C Out: 21.05 16:12:06,542|(59); HBQ In: 21.05 16:12:06,542| DLQ In:21.05 16:12:11,326| ( ID: 59 )
+Received: 3-client@lab25-<0.93.0>-C-9-09: 60te_Nachricht. C Out: 21.05 16:12:06,542|(60); HBQ In: 21.05 16:12:06,542| DLQ In:21.05 16:12:11,326| ( ID: 60 )
+Received: 2-client@lab25-<0.94.0>-C-9-09: 61te_Nachricht. C Out: 21.05 16:12:06,542|(61); HBQ In: 21.05 16:12:06,542| DLQ In:21.05 16:12:11,326| ( ID: 61 )
+Received: 1-client@lab25-<0.95.0>-C-9-09: 62te_Nachricht. C Out: 21.05 16:12:06,542|(62); HBQ In: 21.05 16:12:06,542| DLQ In:21.05 16:12:11,326| ( ID: 62 )
+Received: client-1@lab26-<0.3221.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|"(63); HBQ In: 21.05 16:12:06,315| DLQ In:21.05 16:12:11,326| ( ID: 63 )
+Received: client-5@lab26-<0.3217.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|"(64); HBQ In: 21.05 16:12:06,315| DLQ In:21.05 16:12:11,326| ( ID: 64 )
+Received: client-4@lab26-<0.3218.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|"(65); HBQ In: 21.05 16:12:06,315| DLQ In:21.05 16:12:11,326| ( ID: 65 )
+Received: client-8@lab26-<0.3214.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|"(66); HBQ In: 21.05 16:12:06,315| DLQ In:21.05 16:12:11,326| ( ID: 66 )
+Received: client-3@lab26-<0.3219.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|"(67); HBQ In: 21.05 16:12:06,316| DLQ In:21.05 16:12:11,326| ( ID: 67 )
+Received: client-7@lab26-<0.3215.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|"(68); HBQ In: 21.05 16:12:06,317| DLQ In:21.05 16:12:11,326| ( ID: 68 )
+Received: client-9@lab26-<0.3213.0>-C-3-99: 5te_Nachricht. Sendezeit: "21.05 16:12:06,309|"(69); HBQ In: 21.05 16:12:06,317| DLQ In:21.05 16:12:11,326| ( ID: 69 )

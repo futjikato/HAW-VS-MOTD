@@ -1,6 +1,5 @@
 *.beam
 .idea
 *.iml
-*.log
 exportToHTML
 out
