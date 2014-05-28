@@ -52,6 +52,7 @@ loop(Servername,H,D,C,Uid) ->
       NewC = lists:keydelete(Client, 1, C),
       loop(Servername,H,D,NewC,Uid)
   after
+    % timeout 30minute
     180000 ->
       log("Server says goodbye! ( PID: ~p | HLength: ~p | DLength: ~p )~n", [self(), erlang:length(H), erlang:length(D)]),
       global:unregister_name(Servername)
@@ -157,8 +158,9 @@ getConfigOption(Configname) ->
 %%% Logs in file and on console
 %%%-------------------------------------------------------------------
 log(Msg) ->
+  DatedMessage = erlang:append(Msg, werkzeug:timeMilliSecond()),
   Logfilename = io_lib:format("NServer@~p.log", [self()]),
-  werkzeug:logging(Logfilename, io_lib:format(Msg, [])).
+  werkzeug:logging(Logfilename, io_lib:format(DatedMessage, [])).
 log(Msg, Params) ->
   log(io_lib:format(Msg, Params)).
 
