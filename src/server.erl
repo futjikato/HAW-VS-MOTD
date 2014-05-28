@@ -33,11 +33,11 @@ loop(Servername,H,D,C,Uid) ->
       {Number, Nachricht} = getMessage(Client,C,D),
       Client ! { message, Number,Nachricht,isTerminat(Number, D)},
       NewC = setLastMsgSendToClient(Client, Number, C),
-      log("Nachricht Nr ~p an ~p gesendet : ~p~n", [Number, Client, lists:flatten(Nachricht)]),
+      log("Nachricht Nr ~p an ~p gesendet : ~s~n", [Number, Client, Nachricht]),
       loop(Servername,H,D,NewC,Uid);
 
     {new_message, {Nachricht, Number}} ->
-      log("Nachricht ~p bekommen : ~p~n", [Number, lists:flatten(Nachricht)]),
+      log("Nachricht ~p bekommen : ~s~n", [Number, Nachricht]),
       % save message if id is unique
       {NewH, NewD} = saveMessage(H, D, Number, Nachricht),
       loop(Servername,NewH,NewD,C,Uid);
@@ -52,7 +52,7 @@ loop(Servername,H,D,C,Uid) ->
       NewC = lists:keydelete(Client, 1, C),
       loop(Servername,H,D,NewC,Uid)
   after
-    20000 ->
+    180000 ->
       log("Server says goodbye! ( PID: ~p | HLength: ~p | DLength: ~p )~n", [self(), erlang:length(H), erlang:length(D)]),
       global:unregister_name(Servername)
   end.
