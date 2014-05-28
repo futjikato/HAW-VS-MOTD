@@ -19,46 +19,48 @@
 %%% Start the server
 %%%-------------------------------------------------------------------
 start() ->
-  ServerPid = spawn(fun() -> loop([],[],[],0) end),
-  log("Server started with PID ~p~n", [ServerPid]),
   {ok, ConfigListe} = file:consult("server.cfg"),
-	{ok, Servername} = get_config_value(servername, ConfigListe),
+  {ok, Servername} = get_config_value(servername, ConfigListe),
+  ServerPid = spawn(fun() -> loop(Servername, [],[],[],0) end),
   global:register_name(Servername,ServerPid).
 
 %%%-------------------------------------------------------------------
 %%% Server loop
 %%%-------------------------------------------------------------------
-loop(H,D,C,Uid) ->
+loop(Servername,H,D,C,Uid) ->
   receive
     {query_messages, Client} ->
       {Number, Nachricht} = getMessage(Client,C,D),
       Client ! { message, Number,Nachricht,isTerminat(Number, D)},
       NewC = setLastMsgSendToClient(Client, Number, C),
-      log("Nachricht Nr ~p an ~p gesendet~n", [Number, Client]),
-      loop(H,D,NewC,Uid);
+      log("Nachricht Nr ~p an ~p gesendet : ~p~n", [Number, Client, lists:flatten(Nachricht)]),
+      loop(Servername,H,D,NewC,Uid);
 
     {new_message, {Nachricht, Number}} ->
-      log("Nachricht ~p bekommen : ~p~n", [Number, Nachricht]),
+      log("Nachricht ~p bekommen : ~p~n", [Number, lists:flatten(Nachricht)]),
       % save message if id is unique
       {NewH, NewD} = saveMessage(H, D, Number, Nachricht),
-      loop(NewH,NewD,C,Uid);
+      loop(Servername,NewH,NewD,C,Uid);
 
     {query_msgid, Client} ->
       log("Nachrichtennummer ~p gesendet ~p~n", [Uid + 1, Client]),
       Client ! { msgid, Uid},
-      loop(H,D,C,Uid + 1);
+      loop(Servername,H,D,C,Uid + 1);
 
     {remove_client, Client} ->
-      log("Going to remove client ~p from list ~p~n", [Client, C]),
+      log("Lese-Client vergessen : ~p~n", [Client]),
       NewC = lists:keydelete(Client, 1, C),
-      loop(H,D,NewC,Uid)
+      loop(Servername,H,D,NewC,Uid)
+  after
+    20000 ->
+      log("Server says goodbye! ( PID: ~p | HLength: ~p | DLength: ~p )~n", [self(), erlang:length(H), erlang:length(D)]),
+      global:unregister_name(Servername)
   end.
 
 isTerminat(_Nr, []) ->
   true;
 isTerminat(Nr, D) ->
   MaxNr = werkzeug:maxNrSL(D),
-  log("Max delivery queue ~p~n", [MaxNr]),
   if
     Nr =:= MaxNr ->
       true;
@@ -76,11 +78,9 @@ saveMessage(H, D, Number, Nachricht) ->
   Hlength = erlang:length(NewH),
   % check if D is greater then allowed if so pop last elem into Holdqueue.
   DeliverQueueLimit = getConfigOption(dlqlimit),
-  log("~p >= ~p~n", [Hlength, DeliverQueueLimit div 2]),
-  log("Delivery queue: ~p~n", [erlang:length(D)]),
   if
     Hlength >= (DeliverQueueLimit div 2) ->
-      log("Nachricht umschichten.~n"),
+      log("Nachrichten umschichten.~n"),
       {NewNewH, NewD} = rearrengeList(D,NewH),
       {NewNewH, NewD};
     true ->
@@ -94,9 +94,14 @@ getMessage(Client,C,D) ->
   LastMsgNr = getLastMsgSendToClient(Client,C,D),
   NextMsgNr = LastMsgNr + 1,
   SaveMsgNr = lists:max([NextMsgNr, werkzeug:minNrSL(D)]),
-  log("Nachricht die ausgeliefert werden soll ~p~n", [SaveMsgNr]),
   {MsgNr,Msg} = werkzeug:findneSL(D, SaveMsgNr),
-  {MsgNr, Msg}.
+  log("Auszuliefernde Nachricht ( Gesucht:~p | Gefunden:~p )~n", [SaveMsgNr, MsgNr]),
+  if
+    MsgNr == -1 ->
+      {-1, "Nicht leere Dummynachricht"};
+    true ->
+      {MsgNr, Msg}
+  end.
 
 %%%-------------------------------------------------------------------
 %%% Put a message into the given queue
@@ -116,8 +121,9 @@ rearrengeList(D,[{MsgNr, Msg}]) ->
   {NewD, []};
 rearrengeList(D,[{MsgNr, Msg}|Tail]) ->
   {LastDNr, _} = werkzeug:findSL(D, werkzeug:maxNrSL(D)),
+  FixedLastDNr = lists:max([LastDNr, 0]),
   if
-    MsgNr == LastDNr + 1 ->
+    MsgNr == FixedLastDNr + 1 ->
       DeliverQueueLimit = getConfigOption(dlqlimit),
       Dlength = werkzeug:lengthSL(D),
       if
@@ -126,11 +132,15 @@ rearrengeList(D,[{MsgNr, Msg}|Tail]) ->
         true ->
           noop
       end,
+      log("Nachricht ~p von Holdbackqueue in Deliverqueue.~n", [MsgNr]),
       NewD = werkzeug:pushSL(D, {MsgNr, Msg}),
       {SuperNewD, NewTail} = rearrengeList(NewD, Tail),
       {SuperNewD, NewTail};
     true ->
-      {D,[{MsgNr, Msg}|Tail]}
+      NewH = [{MsgNr, Msg}|Tail],
+      GapClosedMsg = {MsgNr - 1, io_lib:format("***Fehlernachricht fuer Nachrichtennummern ~p bis ~p~n", [FixedLastDNr, MsgNr])},
+      ClosedGapD = werkzeug:pushSL(D, GapClosedMsg),
+      {ClosedGapD,NewH}
   end.
 
 %%%-------------------------------------------------------------------
@@ -158,7 +168,6 @@ log(Msg, Params) ->
 getLastMsgSendToClient(Client, [{Process,Nr,_}], D) ->
   if
     Process =:= Client ->
-      log("Found client ~p Return ~p~n", [Client, Nr]),
       Nr;
     true ->
       werkzeug:minNrSL(D)
@@ -166,7 +175,6 @@ getLastMsgSendToClient(Client, [{Process,Nr,_}], D) ->
 getLastMsgSendToClient(Client, [{Process,Nr,_}|Tail], D) ->
   if
     Process =:= Client ->
-      log("Found2 client ~p Return ~p~n", [Client, Nr]),
       Nr;
     true ->
       getLastMsgSendToClient(Client, Tail, D)
